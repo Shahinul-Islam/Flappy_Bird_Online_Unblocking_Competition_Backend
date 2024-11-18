@@ -2,9 +2,13 @@
   "name": "flappy-bird-backend",
   "version": "1.0.0",
   "main": "index.js",
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "vercel-build": "echo hello"
   },
   "keywords": [],
   "author": "",
@@ -21,5 +25,8 @@
     "mongoose": "^8.7.3",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
   }
 }
