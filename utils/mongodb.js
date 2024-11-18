@@ -7,17 +7,33 @@ async function connectToDatabase() {
         return cachedConnection;
     }
 
+    const uri = process.env.MONGODB_URI;
+    
+    if (!uri) {
+        throw new Error('MONGODB_URI environment variable is not defined');
+    }
+
     try {
+        console.log('Connecting to MongoDB...');
+        
         const opts = {
-            serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
-            maxPoolSize: 10, // Maintain up to 10 socket connections
+            serverSelectionTimeoutMS: 5000,
+            maxPoolSize: 10,
+            socketTimeoutMS: 10000,
+            connectTimeoutMS: 10000,
         };
 
-        const connection = await mongoose.connect(process.env.MONGODB_URI, opts);
+        const connection = await mongoose.connect(uri, opts);
+        console.log('Successfully connected to MongoDB');
+        
         cachedConnection = connection;
         return connection;
     } catch (error) {
-        console.error('MongoDB connection error:', error);
+        console.error('MongoDB connection error details:', {
+            error: error.message,
+            code: error.code,
+            uri: uri ? uri.substring(0, uri.indexOf('://') + 3) + '...' : 'undefined'
+        });
         throw error;
     }
 }
