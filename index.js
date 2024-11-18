@@ -37,15 +37,28 @@ app.use("/api/scores", scoreRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: "Something went wrong!", details: err.message });
+    console.error('Global error handler:', err);
+    res.status(500).json({ 
+        error: "Something went wrong!", 
+        details: err.message 
+    });
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Promise Rejection:', err);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    process.exit(1);
 });
 
 // For local development
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
-// Export for serverless deployment
 module.exports = app;
