@@ -1,5 +1,4 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
@@ -28,12 +27,6 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// MongoDB connection with connection pooling
-mongoose
-    .connect(process.env.MONGODB_URI, {})
-    .then(() => console.log("MongoDB connected"))
-    .catch((err) => console.error("MongoDB connection error:", err));
-
 // Health check route
 app.get("/", (req, res) => {
     res.status(200).json({ status: "OK", message: "Server is running" });
@@ -45,7 +38,7 @@ app.use("/api/scores", scoreRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).json({ error: "Something went wrong!" });
+    res.status(500).json({ error: "Something went wrong!", details: err.message });
 });
 
 // For local development
