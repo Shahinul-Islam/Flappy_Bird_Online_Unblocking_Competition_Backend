@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const scoreRoutes = require("./routes/scores");
+const contactRoutes = require("./routes/contact");
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +35,7 @@ app.get("/", (req, res) => {
 
 // API routes
 app.use("/api/scores", scoreRoutes);
+app.use("/api/contact", contactRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
