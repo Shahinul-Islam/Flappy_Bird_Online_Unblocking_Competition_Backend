@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const scoreRoutes = require("./routes/scores");
 const contactRoutes = require("./routes/contact");
+const authRoutes = require("./routes/auth");
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +35,7 @@ app.get("/", (req, res) => {
 });
 
 // API routes
+app.use("/api/auth", authRoutes);
 app.use("/api/scores", scoreRoutes);
 app.use("/api/contact", contactRoutes);
 
