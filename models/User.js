@@ -66,6 +66,16 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    isPaymentValid: {
+        type: Boolean,
+        default: false
+    },
+    lastPaymentDate: {
+        type: Date
+    },
+    paymentValidUntil: {
+        type: Date
+    },
     createdAt: {
         type: Date,
         default: Date.now

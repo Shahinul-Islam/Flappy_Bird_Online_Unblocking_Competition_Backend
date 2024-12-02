@@ -3,9 +3,11 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const dbConnect = require("./config/database");
 const scoreRoutes = require("./routes/scores");
 const contactRoutes = require("./routes/contact");
 const authRoutes = require("./routes/auth");
+const paymentRoutes = require("./routes/payment");
 
 // Load environment variables
 dotenv.config();
@@ -20,6 +22,7 @@ app.use(cors());
 
 // Middleware for parsing JSON
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -28,6 +31,9 @@ const limiter = rateLimit({
     message: "Too many requests, please try again later.",
 });
 app.use(limiter);
+
+// Connect to database
+dbConnect();
 
 // Health check route
 app.get("/", (req, res) => {
@@ -38,6 +44,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/scores", scoreRoutes);
 app.use("/api/contact", contactRoutes);
+app.use("/api/payment", paymentRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
