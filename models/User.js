@@ -14,7 +14,10 @@ const userSchema = new mongoose.Schema({
         trim: true,
         lowercase: true,
         maxlength: [100, 'Email cannot be more than 100 characters'],
-        sparse: true
+        index: { 
+            sparse: true,
+            name: 'idx_email_sparse'
+        }
     },
     mobile: {
         type: String,
@@ -23,10 +26,13 @@ const userSchema = new mongoose.Schema({
         trim: true,
         validate: {
             validator: function(v) {
-                // Validate Bangladeshi mobile number format
-                return /^(\+880|0)?1[0-9]{9}$/.test(v);
+                return /^(\+880|0)?1[3-9][0-9]{8}$/.test(v);
             },
             message: props => `${props.value} is not a valid Bangladeshi mobile number!`
+        },
+        index: {
+            unique: true,
+            name: 'idx_mobile_unique'
         }
     },
     password: {
@@ -37,40 +43,41 @@ const userSchema = new mongoose.Schema({
     referralCode: {
         type: String,
         unique: true,
+        required: true,
         default: function() {
-            return crypto.randomBytes(4).toString('hex').toUpperCase();
+            return crypto.randomBytes(3).toString('hex').toUpperCase();
+        },
+        index: {
+            unique: true,
+            sparse: true,
+            name: 'idx_referralCode_unique_sparse'
         }
     },
     referredBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        sparse: true
+        default: null
     },
     referralCount: {
         type: Number,
         default: 0
     },
-    highScore: {
-        type: Number,
-        default: 0
-    },
-    isPaymentValid: {
-        type: Boolean,
-        default: false
-    },
     isAdmin: {
         type: Boolean,
         default: false
     },
-    lastPaymentDate: {
-        type: Date
-    },
-    paymentValidUntil: {
-        type: Date
-    },
-    createdAt: {
+    lastLogin: {
         type: Date,
         default: Date.now
+    },
+    status: {
+        type: String,
+        enum: ['active', 'inactive', 'banned'],
+        default: 'active'
+    },
+    highScore: {
+        type: Number,
+        default: 0
     }
 }, {
     timestamps: true
@@ -78,28 +85,75 @@ const userSchema = new mongoose.Schema({
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-    if (this.isModified('password')) {
-        this.password = await bcrypt.hash(this.password, 10);
+    if (!this.isModified('password')) return next();
+    
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
     }
-    next();
+});
+
+// Generate referral code before saving if not present
+userSchema.pre('save', function(next) {
+    if (!this.referralCode) {
+        let attempts = 0;
+        const maxAttempts = 5;
+        
+        const generateUniqueCode = () => {
+            return crypto.randomBytes(3).toString('hex').toUpperCase();
+        };
+
+        const tryGenerateCode = async () => {
+            try {
+                const code = generateUniqueCode();
+                const existingUser = await mongoose.model('User').findOne({ referralCode: code });
+                
+                if (!existingUser) {
+                    this.referralCode = code;
+                    return next();
+                }
+                
+                attempts++;
+                if (attempts < maxAttempts) {
+                    await tryGenerateCode();
+                } else {
+                    next(new Error('Could not generate unique referral code'));
+                }
+            } catch (error) {
+                next(error);
+            }
+        };
+
+        tryGenerateCode();
+    } else {
+        next();
+    }
 });
 
 // Method to check password
 userSchema.methods.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+    return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Create indexes
-userSchema.index({ mobile: 1 }, { unique: true });
-userSchema.index({ referralCode: 1 }, { unique: true });
-userSchema.index({ email: 1 }, { sparse: true });
-userSchema.index({ referredBy: 1 });
+// Virtual for referral link
+userSchema.virtual('referralLink').get(function() {
+    if (!this.referralCode) return null;
+    return `${process.env.FRONTEND_URL || 'http://localhost:3000'}/register?ref=${this.referralCode}`;
+});
 
-let User;
-try {
-    User = mongoose.model('User');
-} catch (e) {
-    User = mongoose.model('User', userSchema);
-}
+// Configure toJSON
+userSchema.set('toJSON', {
+    virtuals: true,
+    transform: function(doc, ret) {
+        delete ret.password;
+        delete ret.__v;
+        return ret;
+    }
+});
+
+const User = mongoose.model('User', userSchema);
 
 module.exports = User;

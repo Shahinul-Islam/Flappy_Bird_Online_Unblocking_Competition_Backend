@@ -32,16 +32,21 @@ router.post("/register", async (req, res) => {
 
         const { name, mobile, password, email, referralCode } = req.body;
 
-        // Validate mobile number format
-        if (!mobile.match(/^(\+880|0)?1[0-9]{9}$/)) {
+        // Validate mobile number format (more flexible)
+        const cleanMobile = mobile.replace(/[- ]/g, ''); // Remove spaces and dashes
+        if (!cleanMobile.match(/^(?:\+?880|0)?1[3-9][0-9]{8}$/)) {
             return res.status(400).json({
-                error: "Invalid mobile number format. Use Bangladeshi number format."
+                error: "Invalid mobile number format",
+                message: "Please enter a valid Bangladeshi number (e.g., 01712345678 or +8801712345678)"
             });
         }
 
         // Format mobile number to standard format
-        const formattedMobile = mobile.startsWith('+880') ? 
-            mobile : `+880${mobile.replace(/^0/, '')}`;
+        const formattedMobile = cleanMobile.startsWith('+880') ? 
+            cleanMobile : 
+            cleanMobile.startsWith('880') ? 
+                `+${cleanMobile}` : 
+                `+880${cleanMobile.replace(/^0/, '')}`;
 
         // Check if user already exists
         const existingUser = await User.findOne({ mobile: formattedMobile });
