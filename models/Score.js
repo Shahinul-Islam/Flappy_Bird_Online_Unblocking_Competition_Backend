@@ -1,67 +1,50 @@
 const mongoose = require("mongoose");
 
 const scoreSchema = new mongoose.Schema({
-    username: { 
-        type: String, 
-        required: [true, 'Username is required'],
-        trim: true,
-        maxlength: [50, 'Username cannot be more than 50 characters']
-    },
-    email: { 
-        type: String, 
-        required: [true, 'Email is required'],
-        trim: true,
-        lowercase: true,
-        maxlength: [100, 'Email cannot be more than 100 characters']
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: [true, 'User ID is required'],
+        index: true
     },
     score: { 
         type: Number, 
         required: [true, 'Score is required'],
         min: [0, 'Score cannot be negative']
     },
-    createdAt: { 
-        type: Date, 
-        default: Date.now,
-        index: true // Add index for date queries
+    sessionId: {
+        type: String,
+        required: [true, 'Session ID is required'],
+        index: true
+    },
+    isVerified: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    gameEvents: [{
+        timestamp: Date,
+        type: String,
+        data: mongoose.Schema.Types.Mixed
+    }],
+    deviceInfo: {
+        type: mongoose.Schema.Types.Mixed,
+        required: false
+    },
+    clientVersion: {
+        type: String,
+        required: [true, 'Client version is required']
     }
 }, {
-    timestamps: true, // Adds createdAt and updatedAt timestamps
-    collection: 'flappy_bird_users', // Explicitly set collection name
-    strict: true // Enforce schema validation
+    timestamps: true,
+    collection: 'scores'
 });
 
-// Add compound index for email and score
-scoreSchema.index({ email: 1, score: -1 });
+// Add compound indexes for common queries
+scoreSchema.index({ userId: 1, score: -1 });
+scoreSchema.index({ createdAt: -1 });
+scoreSchema.index({ score: -1, isVerified: 1 });
 
-// Add error handling to the model
-scoreSchema.post('save', function(error, doc, next) {
-    if (error.name === 'MongoServerError' && error.code === 11000) {
-        next(new Error('A score with this email already exists'));
-    } else {
-        next(error);
-    }
-});
-
-// Handle undefined fields
-scoreSchema.pre('save', function(next) {
-    const score = this;
-    
-    // Set default values if undefined
-    if (score.createdAt === undefined) {
-        score.createdAt = new Date();
-    }
-    
-    next();
-});
-
-// Create the model
-let Score;
-try {
-    // Try to get the existing model
-    Score = mongoose.model('Score');
-} catch (e) {
-    // Model doesn't exist, create it
-    Score = mongoose.model('Score', scoreSchema);
-}
+const Score = mongoose.model('Score', scoreSchema);
 
 module.exports = Score;

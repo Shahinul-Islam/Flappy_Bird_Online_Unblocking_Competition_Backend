@@ -191,71 +191,74 @@ router.post(
     }
 );
 
-// GET route to fetch leaderboard data (public access with rate limiting)
+// Get high scores for different time periods
 router.get("/", async (req, res) => {
-    console.log('GET /api/scores - Starting request');
-    
     try {
-        console.log('Connecting to database...');
-        await dbConnect();
-        console.log('Database connection successful');
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const last7Days = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+        const last30Days = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
 
-        console.log('Fetching scores...');
-        const allScores = await Score.find()
-            .select('username score createdAt')
-            .sort({ score: -1 })
-            .lean()
-            .exec();
-        console.log(`Retrieved ${allScores.length} scores`);
+        // Aggregate pipeline to get top scores for each period
+        const pipeline = (startDate) => [
+            { 
+                $match: { 
+                    createdAt: { $gte: startDate },
+                    isVerified: true
+                } 
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: 'user'
+                }
+            },
+            { $unwind: '$user' },
+            {
+                $project: {
+                    score: 1,
+                    'playerName': '$user.name',
+                    createdAt: 1
+                }
+            },
+            { $sort: { score: -1 } },
+            { $limit: 10 }
+        ];
 
-        const scoresByPeriod = {
-            today: [],
-            last7Days: [],
-            last30Days: []
-        };
+        // Get scores for each time period
+        const [todayScores, weeklyScores, monthlyScores] = await Promise.all([
+            Score.aggregate(pipeline(today)),
+            Score.aggregate(pipeline(last7Days)),
+            Score.aggregate(pipeline(last30Days))
+        ]);
 
-        allScores.forEach((scoreEntry) => {
-            const period = calculatePeriod(scoreEntry.createdAt);
-            if (period in scoresByPeriod) {
-                scoresByPeriod[period].push({
-                    username: scoreEntry.username,
-                    score: scoreEntry.score
-                });
-            }
+        res.json({
+            today: todayScores.map(s => ({
+                playerName: s.playerName,
+                score: s.score,
+                date: s.createdAt
+            })),
+            last7Days: weeklyScores.map(s => ({
+                playerName: s.playerName,
+                score: s.score,
+                date: s.createdAt
+            })),
+            last30Days: monthlyScores.map(s => ({
+                playerName: s.playerName,
+                score: s.score,
+                date: s.createdAt
+            }))
         });
-
-        const response = {};
-        for (const [period, scores] of Object.entries(scoresByPeriod)) {
-            response[period] = scores
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 10);
-        }
-
-        console.log('Successfully processed scores');
-        res.json(response);
     } catch (error) {
-        console.error('Error in GET /api/scores:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
-        });
-        
-        res.status(500).json({ 
-            error: "Error fetching leaderboard data",
+        console.error('Error fetching high scores:', error);
+        res.status(500).json({
+            error: "Error fetching high scores",
             details: error.message
         });
     }
 });
-
-// Helper function to calculate period
-function calculatePeriod(date) {
-    const now = new Date();
-    const diffInDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-    if (diffInDays < 1) return "today";
-    if (diffInDays < 7) return "last7Days";
-    if (diffInDays < 30) return "last30Days";
-    return "older";
-}
 
 // Get user's personal best scores
 router.get("/personal", verifyToken, async (req, res) => {
