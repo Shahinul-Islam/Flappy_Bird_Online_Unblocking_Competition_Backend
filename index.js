@@ -8,6 +8,7 @@ const scoreRoutes = require("./routes/scores");
 const contactRoutes = require("./routes/contact");
 const authRoutes = require("./routes/auth");
 const paymentRoutes = require("./routes/payment");
+const adminRoutes = require("./routes/admin");
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +46,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/scores", scoreRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

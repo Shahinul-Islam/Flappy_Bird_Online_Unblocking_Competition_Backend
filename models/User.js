@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -7,6 +8,13 @@ const userSchema = new mongoose.Schema({
         required: [true, 'Name is required'],
         trim: true,
         maxlength: [50, 'Name cannot be more than 50 characters']
+    },
+    email: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        maxlength: [100, 'Email cannot be more than 100 characters'],
+        sparse: true
     },
     mobile: {
         type: String,
@@ -21,52 +29,36 @@ const userSchema = new mongoose.Schema({
             message: props => `${props.value} is not a valid Bangladeshi mobile number!`
         }
     },
-    email: {
-        type: String,
-        trim: true,
-        lowercase: true,
-        maxlength: [100, 'Email cannot be more than 100 characters']
-    },
     password: {
         type: String,
         required: [true, 'Password is required'],
         minlength: [6, 'Password must be at least 6 characters']
     },
-    referralId: {
+    referralCode: {
         type: String,
         unique: true,
         default: function() {
-            const timestamp = Date.now().toString(36);
-            const random = Math.random().toString(36).substr(2, 5);
-            return `${timestamp}${random}`.toUpperCase();
+            return crypto.randomBytes(4).toString('hex').toUpperCase();
         }
     },
-    referralLink: {
-        type: String,
-        unique: true,
-        default: function() {
-            if (!this.referralId) {
-                const timestamp = Date.now().toString(36);
-                const random = Math.random().toString(36).substr(2, 5);
-                this.referralId = `${timestamp}${random}`.toUpperCase();
-            }
-            const baseUrl = process.env.FRONTEND_URL || 'https://flappy-bird-game.vercel.app';
-            return `${baseUrl}/invite?ref=${this.referralId}`;
-        }
+    referredBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        sparse: true
     },
     referralCount: {
         type: Number,
         default: 0
-    },
-    referredBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
     },
     highScore: {
         type: Number,
         default: 0
     },
     isPaymentValid: {
+        type: Boolean,
+        default: false
+    },
+    isAdmin: {
         type: Boolean,
         default: false
     },
@@ -99,8 +91,8 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Create indexes
 userSchema.index({ mobile: 1 }, { unique: true });
-userSchema.index({ referralId: 1 }, { unique: true });
-userSchema.index({ referralLink: 1 }, { unique: true });
+userSchema.index({ referralCode: 1 }, { unique: true });
+userSchema.index({ email: 1 }, { sparse: true });
 userSchema.index({ referredBy: 1 });
 
 let User;
