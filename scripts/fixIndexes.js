@@ -67,9 +67,9 @@ async function fixIndexes() {
         // Referral code index (unique, sparse)
         try {
             await collection.createIndex(
-                { referralCode: 1 },
+                { referralId: 1 },
                 { 
-                    name: 'idx_referralCode_unique_sparse',
+                    name: 'idx_referralId_unique_sparse',
                     unique: true,
                     sparse: true,
                     background: true

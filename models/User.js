@@ -40,17 +40,14 @@ const userSchema = new mongoose.Schema({
         required: [true, 'Password is required'],
         minlength: [6, 'Password must be at least 6 characters']
     },
-    referralCode: {
+    referralId: {
         type: String,
         unique: true,
-        required: true,
-        default: function() {
-            return crypto.randomBytes(3).toString('hex').toUpperCase();
-        },
+        sparse: true,
         index: {
             unique: true,
             sparse: true,
-            name: 'idx_referralCode_unique_sparse'
+            name: 'idx_referralId_unique_sparse'
         }
     },
     referredBy: {
@@ -100,12 +97,9 @@ userSchema.pre('save', async function(next) {
     }
 });
 
-// Generate referral code before saving if not present
+// Generate referral ID before saving if not present
 userSchema.pre('save', function(next) {
-    if (!this.referralCode) {
-        let attempts = 0;
-        const maxAttempts = 5;
-        
+    if (!this.referralId) {
         const generateUniqueCode = () => {
             return crypto.randomBytes(3).toString('hex').toUpperCase();
         };
@@ -113,19 +107,14 @@ userSchema.pre('save', function(next) {
         const tryGenerateCode = async () => {
             try {
                 const code = generateUniqueCode();
-                const existingUser = await mongoose.model('User').findOne({ referralCode: code });
+                const existingUser = await mongoose.model('User').findOne({ referralId: code });
                 
                 if (!existingUser) {
-                    this.referralCode = code;
+                    this.referralId = code;
                     return next();
                 }
                 
-                attempts++;
-                if (attempts < maxAttempts) {
-                    await tryGenerateCode();
-                } else {
-                    next(new Error('Could not generate unique referral code'));
-                }
+                await tryGenerateCode();
             } catch (error) {
                 next(error);
             }
@@ -144,8 +133,8 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Virtual for referral link
 userSchema.virtual('referralLink').get(function() {
-    if (!this.referralCode) return null;
-    return `${process.env.FRONTEND_URL || 'http://localhost:3000'}/register?ref=${this.referralCode}`;
+    if (!this.referralId) return null;
+    return `${process.env.FRONTEND_URL || 'http://localhost:3000'}/register?ref=${this.referralId}`;
 });
 
 // Configure toJSON

@@ -21,7 +21,6 @@
     "dotenv": "^16.4.6",
     "express": "^4.21.1",
     "express-rate-limit": "^7.1.5",
-    "express-validator": "^7.2.0",
     "helmet": "^7.1.0",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",

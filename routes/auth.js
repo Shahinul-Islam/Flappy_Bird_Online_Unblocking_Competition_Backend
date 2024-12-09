@@ -1,7 +1,6 @@
 const express = require("express");
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
-const { body, validationResult } = require("express-validator");
 const dbConnect = require("../config/database");
 const router = express.Router();
 
@@ -30,7 +29,7 @@ router.post("/register", async (req, res) => {
     try {
         await dbConnect();
 
-        const { name, mobile, password, email, referralCode } = req.body;
+        const { name, mobile, password, email, referralId } = req.body;
 
         // Validate mobile number format (more flexible)
         const cleanMobile = mobile.replace(/[- ]/g, ''); // Remove spaces and dashes
@@ -58,8 +57,8 @@ router.post("/register", async (req, res) => {
 
         // Check referral code if provided
         let referredBy = null;
-        if (referralCode) {
-            referredBy = await User.findOne({ referralId: referralCode });
+        if (referralId) {
+            referredBy = await User.findOne({ referralId: referralId });
             if (!referredBy) {
                 return res.status(400).json({
                     error: "Invalid referral code"
@@ -78,28 +77,29 @@ router.post("/register", async (req, res) => {
 
         await user.save();
 
-        // Update referrer's count if applicable
+        // If there's a referrer, increment their referral count
         if (referredBy) {
-            await User.findByIdAndUpdate(referredBy._id, {
-                $inc: { referralCount: 1 }
-            });
+            await User.findByIdAndUpdate(referredBy._id, { $inc: { referralCount: 1 } });
         }
 
         // Generate token
         const token = generateToken(user._id);
 
+        // Get the saved user with virtuals populated
+        const savedUser = await User.findById(user._id);
+
         res.status(201).json({
             message: "Registration successful",
             token,
             user: {
-                id: user._id,
-                name: user.name,
-                mobile: user.mobile,
-                email: user.email,
-                referralId: user.referralId,
-                referralLink: user.referralLink,
-                referralCount: user.referralCount,
-                highScore: user.highScore
+                id: savedUser._id,
+                name: savedUser.name,
+                mobile: savedUser.mobile,
+                email: savedUser.email,
+                referralId: savedUser.referralId,
+                referralLink: savedUser.referralLink,
+                referralCount: savedUser.referralCount,
+                highScore: savedUser.highScore
             }
         });
     } catch (error) {
@@ -112,37 +112,35 @@ router.post("/register", async (req, res) => {
 });
 
 // Login user
-router.post("/login", [
-    body("mobile")
-        .trim()
-        .matches(/^(\+880|0)?1[0-9]{9}$/)
-        .withMessage("Invalid Bangladeshi mobile number"),
-    body("password")
-        .notEmpty()
-        .withMessage("Password is required")
-], async (req, res) => {
+router.post("/login", async (req, res) => {
     try {
         await dbConnect();
 
-        // Log the received request body
-        console.log('Login request body:', req.body);
+        const { mobile, password } = req.body;
 
-        // Validate input
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ 
-                error: "Validation failed", 
-                details: errors.array() 
+        // Validate required fields
+        if (!mobile || !password) {
+            return res.status(400).json({
+                error: "Validation failed",
+                message: "Mobile number and password are required"
             });
         }
 
-        const { mobile, password } = req.body;
-        
         // Format mobile number
-        const formattedMobile = mobile.startsWith('+880') ? 
-            mobile : `+880${mobile.replace(/^0/, '')}`;
+        const cleanMobile = mobile.replace(/[- ]/g, '');
+        const formattedMobile = cleanMobile.startsWith('+880') ? 
+            cleanMobile : 
+            cleanMobile.startsWith('880') ? 
+                `+${cleanMobile}` : 
+                `+880${cleanMobile.replace(/^0/, '')}`;
 
-        console.log('Searching for user with mobile:', formattedMobile);
+        // Validate mobile number format
+        if (!formattedMobile.match(/^\+8801[3-9][0-9]{8}$/)) {
+            return res.status(400).json({
+                error: "Invalid mobile number format",
+                message: "Please enter a valid Bangladeshi number"
+            });
+        }
 
         // Find user
         const user = await User.findOne({ mobile: formattedMobile });
@@ -165,9 +163,6 @@ router.post("/login", [
         // Generate token
         const token = generateToken(user._id);
 
-        // Log successful login
-        console.log('User logged in successfully:', user.mobile);
-
         res.json({
             success: true,
             message: "Login successful",
@@ -187,50 +182,50 @@ router.post("/login", [
         console.error('Login error:', error);
         res.status(500).json({
             error: "Error during login",
-            details: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            details: error.message
         });
     }
 });
 
-// Verify token middleware
-const verifyToken = async (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-        return res.status(401).json({ error: "No token provided" });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.userId;
-    next();
-};
-
 // Get user profile
-router.get("/profile", verifyToken, async (req, res) => {
+router.get("/profile", async (req, res) => {
     try {
-        const user = await User.findById(req.userId)
-            .select('-password')
-            .populate('referredBy', 'name mobileNumber');
-
-        if (!user) {
-            return res.status(404).json({ error: "User not found" });
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        
+        if (!token) {
+            return res.status(401).json({
+                error: "No token provided"
+            });
         }
 
-        // Get referral statistics
-        const referredUsers = await User.find({ referredBy: user._id })
-            .select('name mobileNumber createdAt')
-            .sort({ createdAt: -1 });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+
+        if (!user) {
+            return res.status(404).json({
+                error: "User not found"
+            });
+        }
 
         res.json({
             success: true,
             user: {
-                ...user.toObject(),
-                referralLink: `${process.env.FRONTEND_URL || 'https://flappy-bird-game.vercel.app'}/invite?ref=${user.referralCode}`,
-                referredUsers: referredUsers
+                id: user._id,
+                name: user.name,
+                mobile: user.mobile,
+                email: user.email,
+                referralId: user.referralId,
+                referralLink: user.referralLink,
+                referralCount: user.referralCount,
+                highScore: user.highScore
             }
         });
     } catch (error) {
-        console.error("Profile error:", error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({
+                error: "Invalid token"
+            });
+        }
         res.status(500).json({
             error: "Error fetching profile",
             details: error.message
@@ -238,68 +233,109 @@ router.get("/profile", verifyToken, async (req, res) => {
     }
 });
 
-// Get referral stats
-router.get("/referrals", verifyToken, async (req, res) => {
+// Generate share link for referral with social sharing options
+router.get("/share-link", async (req, res) => {
     try {
-        const user = await User.findById(req.userId);
-        if (!user) {
-            return res.status(404).json({ error: "User not found" });
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        
+        if (!token) {
+            return res.status(401).json({
+                error: "No token provided"
+            });
         }
 
-        const referredUsers = await User.find({ referredBy: user._id })
-            .select('name mobileNumber createdAt')
-            .sort({ createdAt: -1 });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+
+        if (!user) {
+            return res.status(404).json({
+                error: "User not found"
+            });
+        }
+
+        // Generate referral link if not exists
+        if (!user.referralLink) {
+            const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+            user.referralLink = `${baseUrl}/register?ref=${user.referralId}`;
+            await user.save();
+        }
+
+        // Create sharing message
+        const shareMessage = encodeURIComponent(`Join me on Flappy Bird! Use my referral code: ${user.referralId}`);
+        const shareUrl = encodeURIComponent(user.referralLink);
+
+        // Generate social sharing links
+        const whatsappUrl = `https://api.whatsapp.com/send?text=${shareMessage}%20${shareUrl}`;
+        const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}&quote=${shareMessage}`;
+        
 
         res.json({
             success: true,
-            referralInfo: {
-                referralCode: user.referralCode,
-                referralLink: `${process.env.FRONTEND_URL || 'https://flappy-bird-game.vercel.app'}/invite?ref=${user.referralCode}`,
-                referralCount: referredUsers.length,
-                referredUsers: referredUsers
+            referralId: user.referralId,
+            referralLink: user.referralLink,
+            referralCount: user.referralCount,
+            shareLinks: {
+                whatsapp: whatsappUrl,
+                facebook: facebookUrl
+               
             }
         });
     } catch (error) {
-        console.error("Referral info error:", error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({
+                error: "Invalid token"
+            });
+        }
         res.status(500).json({
-            error: "Error fetching referral information",
+            error: "Error generating share link",
             details: error.message
         });
     }
 });
 
-// Get shareable referral link
-router.get("/share-link", verifyToken, async (req, res) => {
+// Get user's referrals
+router.get("/referrals", async (req, res) => {
     try {
-        const user = await User.findById(req.userId);
-        if (!user) {
-            return res.status(404).json({ error: "User not found" });
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        
+        if (!token) {
+            return res.status(401).json({
+                error: "No token provided"
+            });
         }
 
-        // Generate the full referral link
-        const baseUrl = process.env.FRONTEND_URL || 'https://flappy-bird-game.vercel.app';
-        const referralLink = `${baseUrl}/invite?ref=${user.referralCode}`;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.userId);
 
-        // Create sharing message
-        const shareMessage = `Play Flappy Bird with me and win exciting rewards! Join using my referral link: ${referralLink}`;
-        
-        // Generate sharing URLs
-        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
-        const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralLink)}`;
+        if (!user) {
+            return res.status(404).json({
+                error: "User not found"
+            });
+        }
+
+        // Find all users who were referred by this user
+        const referrals = await User.find({ referredBy: user._id })
+            .select('name mobile createdAt')
+            .sort({ createdAt: -1 });
 
         res.json({
             success: true,
-            referralLink,
-            shareOptions: {
-                whatsapp: whatsappUrl,
-                facebook: facebookUrl,
-                copyText: shareMessage
-            }
+            referralCount: user.referralCount,
+            referralId: user.referralId,
+            referrals: referrals.map(ref => ({
+                name: ref.name,
+                mobile: ref.mobile,
+                joinedAt: ref.createdAt
+            }))
         });
     } catch (error) {
-        console.error('Share link error:', error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({
+                error: "Invalid token"
+            });
+        }
         res.status(500).json({
-            error: "Error generating share link",
+            error: "Error fetching referrals",
             details: error.message
         });
     }
