@@ -1,5 +1,6 @@
 const express = require("express");
 const Score = require("../models/Score");
+const User = require("../models/User");
 const verifyToken = require("../middleware/auth");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
@@ -37,11 +38,20 @@ router.post("/submit", verifyToken, scoreSubmitLimiter, async (req, res) => {
             .sort({ score: -1 })
             .select('score');
 
+        const isHighScore = !bestScore || score >= bestScore.score;
+
+        // Update user's highScore if this is a new high score
+        if (isHighScore) {
+            await User.findByIdAndUpdate(req.userId, { 
+                $max: { highScore: score }
+            });
+        }
+
         res.json({
             success: true,
             message: "Score recorded successfully",
             finalScore: score,
-            isHighScore: !bestScore || score >= bestScore.score,
+            isHighScore,
             bestScore: bestScore ? bestScore.score : score
         });
     } catch (error) {
