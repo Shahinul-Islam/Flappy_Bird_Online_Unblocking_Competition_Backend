@@ -41,9 +41,13 @@ const paymentSchema = new mongoose.Schema({
         type: Date,
         required: true,
         default: function() {
-            // Valid until the end of next month
             const now = new Date();
-            return new Date(now.getFullYear(), now.getMonth() + 2, 0);
+            // Add exactly 7 days (in milliseconds)
+            const validUntil = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
+            // Set to end of the day
+            validUntil.setHours(23, 59, 59, 999);
+            console.log('Valid Until:', validUntil);
+            return validUntil;
         }
     },
     createdAt: {
@@ -58,6 +62,31 @@ const paymentSchema = new mongoose.Schema({
 paymentSchema.index({ userId: 1 });
 paymentSchema.index({ transactionId: 1 }, { unique: true, sparse: true });
 paymentSchema.index({ validUntil: 1 });
+
+// Middleware to update user's validUntil when payment is completed
+paymentSchema.pre('save', async function(next) {
+    try {
+        // Only update user's validUntil when payment status changes to COMPLETED
+        if (this.isModified('status') && this.status === 'COMPLETED') {
+            const User = mongoose.model('User');
+            
+            // Find current user's validUntil
+            const user = await User.findById(this.userId);
+            
+            // Set new validUntil to the later date between current validUntil and payment validUntil
+            const newValidUntil = user.validUntil && user.validUntil > this.validUntil ? 
+                user.validUntil : this.validUntil;
+            
+            // Update user's validUntil
+            await User.findByIdAndUpdate(this.userId, {
+                validUntil: newValidUntil
+            });
+        }
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
 
 let Payment;
 try {

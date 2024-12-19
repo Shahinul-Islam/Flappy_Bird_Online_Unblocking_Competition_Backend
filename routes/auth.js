@@ -187,19 +187,42 @@ router.post("/login", async (req, res) => {
     }
 });
 
-// Get user profile
-router.get("/profile", async (req, res) => {
+// Verify token middleware
+const verifyToken = async (req, res, next) => {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+        return res.status(401).json({
+            error: "No token provided"
+        });
+    }
+
     try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
-        
-        if (!token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.userId = decoded.userId;
+        next();
+    } catch (error) {
+        if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({
-                error: "No token provided"
+                error: "Invalid token"
             });
         }
+        res.status(500).json({
+            error: "Error verifying token",
+            details: error.message
+        });
+    }
+};
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.userId);
+// Get user profile
+router.get("/profile", verifyToken, async (req, res) => {
+    try {
+        console.log('UserId from token:', req.userId);
+        
+        const user = await User.findById(req.userId)
+            .select('+validUntil'); // Explicitly select validUntil field
+
+        console.log('User from database:', JSON.stringify(user, null, 2));
 
         if (!user) {
             return res.status(404).json({
@@ -207,6 +230,12 @@ router.get("/profile", async (req, res) => {
             });
         }
 
+        // Check if payment is valid (always returns a boolean)
+        // const isPaymentValid = user.validUntil ? new Date(user.validUntil) > new Date() : false;
+        
+        // console.log('Valid Until:', user.validUntil);
+        // console.log('Is Payment Valid:', isPaymentValid);
+const isPaymentValid = false;
         res.json({
             success: true,
             user: {
@@ -217,18 +246,16 @@ router.get("/profile", async (req, res) => {
                 referralId: user.referralId,
                 referralLink: user.referralLink,
                 referralCount: user.referralCount,
-                highScore: user.highScore
+                highScore: user.highScore,
+                validUntil: user.validUntil,
+                isPaymentValid
             }
         });
     } catch (error) {
-        if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({
-                error: "Invalid token"
-            });
-        }
+        console.error('Error getting profile:', error);
         res.status(500).json({
-            error: "Error fetching profile",
-            details: error.message
+            error: "Error getting profile",
+            message: error.message
         });
     }
 });

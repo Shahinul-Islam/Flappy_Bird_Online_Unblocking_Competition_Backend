@@ -101,7 +101,9 @@ router.post("/verify", verifyToken, async (req, res) => {
         // Find the payment
         const payment = await Payment.findOne({
             _id: paymentId,
-            userId
+            userId,
+            // transactionId
+
         });
 
         if (!payment) {
@@ -115,12 +117,15 @@ router.post("/verify", verifyToken, async (req, res) => {
         // Update payment status
         payment.status = 'COMPLETED';
         payment.transactionId = transactionId;
+       
+
+
         await payment.save();
 
+        // Get the validUntil date from the payment model
+        const validUntil = payment.validUntil;
+
         // Update user payment status
-        const validUntil = new Date();
-        validUntil.setMonth(validUntil.getMonth() + 1);
-        
         await User.findByIdAndUpdate(userId, {
             isPaymentValid: true,
             lastPaymentDate: new Date(),

@@ -67,6 +67,12 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
+    validUntil: {
+        type: Date,
+        default: null,
+        index: true,
+        select: true
+    },
     status: {
         type: String,
         enum: ['active', 'inactive', 'banned'],
