@@ -63,6 +63,10 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    isPaymentValid: {
+        type: Boolean,
+        default: false
+    },
     lastLogin: {
         type: Date,
         default: Date.now
@@ -141,6 +145,13 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 userSchema.virtual('referralLink').get(function() {
     if (!this.referralId) return null;
     return `${process.env.FRONTEND_URL || 'http://localhost:3000'}/register?ref=${this.referralId}`;
+});
+
+// Virtual for isUserEligible
+userSchema.virtual('isUserEligible').get(function() {
+    const hasEnoughReferrals = this.referralCount >= 5;
+    const isPaymentValid = this.validUntil && new Date(this.validUntil) > new Date();
+    return hasEnoughReferrals && isPaymentValid;
 });
 
 // Configure toJSON

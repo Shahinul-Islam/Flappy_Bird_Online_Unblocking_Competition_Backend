@@ -217,12 +217,7 @@ const verifyToken = async (req, res, next) => {
 // Get user profile
 router.get("/profile", verifyToken, async (req, res) => {
     try {
-        console.log('UserId from token:', req.userId);
-        
-        const user = await User.findById(req.userId)
-            .select('+validUntil'); // Explicitly select validUntil field
-
-        console.log('User from database:', JSON.stringify(user, null, 2));
+        const user = await User.findById(req.userId);
 
         if (!user) {
             return res.status(404).json({
@@ -230,12 +225,15 @@ router.get("/profile", verifyToken, async (req, res) => {
             });
         }
 
-        // Check if payment is valid (always returns a boolean)
-        // const isPaymentValid = user.validUntil ? new Date(user.validUntil) > new Date() : false;
-        
-        // console.log('Valid Until:', user.validUntil);
-        // console.log('Is Payment Valid:', isPaymentValid);
-const isPaymentValid = false;
+        // Check if payment is valid
+        const isPaymentValid = user.validUntil ? new Date(user.validUntil) > new Date() : false;
+
+        // Update isPaymentValid field
+        if (user.isPaymentValid !== isPaymentValid) {
+            user.isPaymentValid = isPaymentValid;
+            await user.save();
+        }
+
         res.json({
             success: true,
             user: {
@@ -248,7 +246,8 @@ const isPaymentValid = false;
                 referralCount: user.referralCount,
                 highScore: user.highScore,
                 validUntil: user.validUntil,
-                isPaymentValid
+                isPaymentValid: user.isPaymentValid,
+                isUserEligible: user.isUserEligible
             }
         });
     } catch (error) {
